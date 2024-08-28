@@ -1,0 +1,130 @@
+// TEST_MERKULOV E. V. 2024
+
+import java.util.regex.Pattern
+
+// Класс, представляющий SQL запрос
+class Query {
+    private val columns = mutableListOf<String>()                   // Список выбранных колонок
+    private val fromSources = mutableListOf<String>()               // Список источников данных (таблиц)
+    private val joins = mutableListOf<String>()                     // Список объединений таблиц
+    private val whereClauses = mutableListOf<String>()              // Условия отбора
+    private val groupByColumns = mutableListOf<String>()            // Колонки для группировки
+    private val sortColumns = mutableListOf<String>()               // Колонки для сортировки
+    var limit: Int? = null                                          // Лимит на количество возвращаемых строк
+    var offset: Int? = null                                         // Сдвиг для возврата строк
+
+    // Геттеры
+    fun getColumns() = columns
+    fun getFromSources() = fromSources
+    fun getJoins() = joins
+    fun getWhereClauses() = whereClauses
+    fun getGroupByColumns() = groupByColumns
+    fun getSortColumns() = sortColumns
+
+    override fun toString(): String {
+        return "Query(columns=$columns, fromSources=$fromSources, joins=$joins, whereClauses=$whereClauses, " +
+                "groupByColumns=$groupByColumns, sortColumns=$sortColumns, limit=$limit, offset=$offset)"
+    }
+}
+
+// Парсер SQL запросов
+object SqlParser {
+    fun parse(sql: String): Query {
+        val query = Query()
+
+        // Удаляем лишние пробелы
+        var trimmedSql = sql.trim()
+
+        // Обработка columns
+        val selectPattern = Pattern.compile("SELECT\\s+(.*?)\\s+FROM", Pattern.CASE_INSENSITIVE)
+        val selectMatcher = selectPattern.matcher(trimmedSql)
+        if (selectMatcher.find()) {
+            val columns = selectMatcher.group(1)
+            for (column in columns.split(",")) {
+                query.getColumns().add(column.trim())
+            }
+        }
+
+        // Обработка from sources
+        val fromPattern = Pattern.compile("FROM\\s+(.*?)(\\s+(WHERE|GROUP BY|ORDER BY|LIMIT|OFFSET|JOIN).*)?", Pattern.CASE_INSENSITIVE)
+        val fromMatcher = fromPattern.matcher(trimmedSql)
+        if (fromMatcher.find()) {
+            val from = fromMatcher.group(1)
+            for (source in from.split(",")) {
+                query.getFromSources().add(source.trim())
+            }
+        }
+
+        // Обработка where clauses
+        val wherePattern = Pattern.compile("WHERE\\s+(.*?)(\\s+(GROUP BY|ORDER BY|LIMIT|OFFSET).*)?", Pattern.CASE_INSENSITIVE)
+        val whereMatcher = wherePattern.matcher(trimmedSql)
+        if (whereMatcher.find()) {
+            val where = whereMatcher.group(1)
+            for (clause in where.split("AND|OR".toRegex())) {
+                query.getWhereClauses().add(clause.trim())
+            }
+        }
+
+        // Обработка group by
+        val groupByPattern = Pattern.compile("GROUP BY\\s+(.*?)(\\s+(ORDER BY|LIMIT|OFFSET).*)?", Pattern.CASE_INSENSITIVE)
+        val groupByMatcher = groupByPattern.matcher(trimmedSql)
+        if (groupByMatcher.find()) {
+            val groupBy = groupByMatcher.group(1)
+            for (group in groupBy.split(",")) {
+                query.getGroupByColumns().add(group.trim())
+            }
+        }
+
+        // Обработка order by
+        val orderByPattern = Pattern.compile("ORDER BY\\s+(.*?)(\\s+(LIMIT|OFFSET|WHERE|GROUP BY).*)?", Pattern.CASE_INSENSITIVE)
+        val orderByMatcher = orderByPattern.matcher(trimmedSql)
+        if (orderByMatcher.find()) {
+            val orderBy = orderByMatcher.group(1)
+            for (sort in orderBy.split(",")) {
+                query.getSortColumns().add(sort.trim())
+            }
+        }
+
+        // Обработка limit и offset
+        val limitPattern = Pattern.compile("LIMIT\\s+(\\d+)(\\s+OFFSET\\s+(\\d+))?", Pattern.CASE_INSENSITIVE)
+        val limitMatcher = limitPattern.matcher(trimmedSql)
+        if (limitMatcher.find()) {
+            query.limit = limitMatcher.group(1).toInt()
+            if (limitMatcher.group(3) != null) {
+                query.offset = limitMatcher.group(3).toInt()
+            }
+        }
+
+        // Обработка joins: включая неявные объединения
+        val joinPattern = Pattern.compile("(INNER|LEFT|RIGHT|FULL)?\\s*JOIN\\s+(\\w+)", Pattern.CASE_INSENSITIVE)
+        val joinMatcher = joinPattern.matcher(trimmedSql)
+        while (joinMatcher.find()) {
+            val joinType = joinMatcher.group(1)?.let { "$it " } ?: ""
+            val joinSource = joinMatcher.group(2)
+            query.getJoins().add("$joinTypeJOIN $joinSource")
+        }
+
+        // Обработка подзапросов (простейшая обработка)
+        val subqueryPattern = Pattern.compile("SELECT\\s+(.*?)\\s+FROM\\s+\\((.*?)\\)", Pattern.CASE_INSENSITIVE)
+        val subqueryMatcher = subqueryPattern.matcher(trimmedSql)
+        if (subqueryMatcher.find()) {
+            val subqueryColumns = subqueryMatcher.group(1)
+            val subquerySource = subqueryMatcher.group(2)
+            // Здесь можно обработать подзапросы, сохранив их в структуре, если это будет необходимо.
+            // Например, можно добавить новый элемент в Query.
+        }
+
+        return query
+    }
+}
+
+// Основной метод для демонстрации работы парсера
+fun main() {
+    val sql = "SELECT a.id, b.name FROM A a INNER JOIN B b ON a.id = b.a_id WHERE a.status = 1 AND b.count > 100 GROUP BY a.id ORDER BY b.name LIMIT 10 OFFSET 5"
+
+    // Парсим запрос
+    val parsedQuery = SqlParser.parse(sql)
+
+    // Выводим результат
+    println(parsedQuery)
+}
